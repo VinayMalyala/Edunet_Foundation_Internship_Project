@@ -1,0 +1,531 @@
+## edit mode and command mode ##
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split,GridSearchCV,cross_val_score
+import seaborn as sns
+from sklearn.metrics import accuracy_score,mean_squared_error,classification_report,confusion_matrix,precision_score,recall_score,roc_curve,auc
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import chi2
+from sklearn.ensemble import ExtraTreesClassifier,RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC 
+from sklearn.naive_bayes import GaussianNB
+from sklearn.preprocessing import StandardScaler,MinMaxScaler
+from sklearn.neighbors import KNeighborsClassifier
+#read the excel file
+data=pd.read_excel("health care diabetes.xlsx")
+data.head()
+
+data.shape
+The output data.shape representing (768, 9) signifies that the DataFrame 'data' contains 768 rows and 9 columns. 
+data.info()
+data.describe()
+data
+data.describe()
+### Data Preprocessing :Treating Missing Values"
+#### In this dataset missing values represented by 0, so replace by  the mean of their feature columns.
+#Finding number of having null values in a row
+#data[i][data[i] != 0] =>[data[i] != 0] this is condtion return true or false and data[i] will take that values that has value true
+for i in data.columns:
+    print(i,(data[i]==0).sum())
+    #Finding the column with maximum number of null value
+
+#making list of columns which contain null values or 0
+change_col=[]
+for i in data.columns:
+    if (data[i]==0).sum()!=0:
+        change_col.append(i)
+#pregnancies,outcome can be 0 so removing these two
+no_change=["Pregnancies","Outcome"]
+for i in no_change:
+    change_col.remove(i)
+change_col
+#finding the null value percentage 
+null_percentage=(data[change_col]==0).mean()*100
+null_percentage
+#replacing 0 with the mean values of the columns
+for i in change_col:
+   data[i]=data[i].replace([0],data[i].mean())
+#can also use interpolate method also 
+
+
+null_percentages = data.isnull().mean() * 100
+null_percentages
+
+NOW THE DATA IS CLEAN FROM NULL VALUES
+## Detecting outlier and treatment 
+data.describe()
+selected_col=['Glucose', 'BloodPressure', 'SkinThickness', 'Insulin']
+#columns=data[change_col]
+columns=data[selected_col]
+
+plt.figure(figsize=(5,3))
+sns.boxplot(data=columns)
+plt.title("Boxplots for numeric column")
+plt.show()
+#### BOXPLOT/whisker plot => USED FOR VISUALIZING THE OUTLIERS
+IQR =>INTER QUATARILE RANGE LENGTH OF THE BOX TOP-DOWN
+q1=>quantile 1 - 25th percentile 
+q3=>quantile 1 - 75th percentile 
+lower bound => lower whisker line 
+data[condition] => filtering(extraction few rows from dataset) 
+# Finding the Outlier Count in the selected Columns: 
+def find_outliers_iqr(data, column_name):
+# Calculate the first quartile (Q1) and third quartile (Q3) 
+    Q1 = data[column_name].quantile(0.25) 
+    Q3 = data[column_name].quantile(0.75) 
+# Calculate the interquartile range (IQR) 
+    IQR = Q3 - Q1 
+# Define the lower and upper bounds for outliers 
+    lower_bound = Q1 - 1.5 * IQR 
+    upper_bound = Q3 + 1.5 * IQR 
+# Find outliers 
+    outliers = data[(data[column_name] < lower_bound) | (data[column_name] > upper_bound)] 
+# Count the number of outliers 
+    count_outliers = len(outliers) 
+    return count_outliers 
+# Calculate and print the number of outliers for each column of interest 
+for column_name in selected_col: 
+
+  outlier_count = find_outliers_iqr(data,column_name) 
+  print(f"Number of outliers in the '{column_name}' column: {outlier_count}")
+#### Boxplot Analysis for Numerical Columns
+the boxplot illustrates the distribution of of our numerical columns:Glucose,Bloodpressure,skinThickness and insulin.THe following inferences can be drawn:
+##### Glucose
+median glucose level =>200
+iqr is large indicating considerable variability in glucose levels.
+there are no ouliers
+
+##### Blood Pressure:
+median blood pressure :72 mmHg (within normal range)
+Iqr is relatively small suggesting more consistent blood pressure levels.
+few outliers none extemely high or low
+
+##### Insulin 
+=> median insulin level=>79 mlU/L
+IQR IS large inidcation consideragble variablitliy in insulin levels
+more outliers,many are extremely high
+
+##### Overall Observations
+All columns exhiibit a wide range of values with some outliers .Insuling columns has many Outliers.
+median values for all columns except the insuling column fall withing the normal range .
+
+##### Additional Inferences
+:Glucose level show more variability than blood pressure levels
+more outliers in the insulin column compared to blood pressure and skin thickness.
+
+##### Possible interpretations 
+variability in glucose levels may be influenced by factors like diet.exercise,and stress
+outliers in the insulin may be associated underlying medical conditions or phyiological factors. factors such as dietary habits,genetic or medical treatments contribute to higher insulin levels.
+ESSENTIAL to note these inferences are based on a single boxplot and further info is nedded to draw definitive conclusions.
+ 
+## OUTLIER TREATMENT
+
+sorted(data)
+Q1=data.quantile(0.20)
+Q3=data.quantile(0.80)
+IQR=Q3-Q1
+print(IQR)
+
+data_cleared_iqr=data[~((data < (Q1 - 1.5 * IQR)) |(data > (Q3 + 1.5 * IQR))).any(axis=1)]
+data_cleared_iqr
+# axis 1 => column axis=>0 row 
+#removed values less than lower bound and greater than upper bound
+print(data_cleared_iqr.shape)
+print(data.shape)
+data_cleared_iqr.head()
+col=data_cleared_iqr[['Glucose','BloodPressure','SkinThickness','Insulin']]
+
+#checking the ouliers after treatment using box plot 
+plt.figure(figsize=(12,8))
+sns.boxplot(data=col)
+plt.show()
+**It can be observed that ouliers have been significantly reduced**
+
+## EDA-UNIVARIATE analysis for each feature
+eda=>exploratory data analysis
+1) univariate analysis ->Histograms(frequency response plot),Countplot
+2) bivariate analysis
+3) multivariate analysis
+#### Visually exploring variables using histograms
+data['Glucose'].plot(kind='hist',figsize=(5,5))
+plt.legend()
+plt.show()
+#starting from 44 to 199
+#it take bins by default size bw two values
+#tells for specific range how many values are there
+### Inference:
+The data appears to be normally distributed, with a peak in the middle of the range and with the tails tapering off on either side.
+The normal range for blood glucose levels is considered to be between 70 and 110 mg/dL. The data in the image appears to be mostly above this range, suggesting that the people represented in the data may have diabetes.
+The data could be used to create a variety of other visualizations, such as a box plot or a scatter plot. These visualizations could provide more information about the distribution of the data, such as the outliers and the range of values.
+data['BloodPressure'].plot(kind='hist',figsize=(10,5))
+plt.legend()
+plt.show()
+data['SkinThickness'].plot(kind='hist',figsize=(10,5))
+plt.legend()
+plt.show()
+data['Insulin'].plot(kind='hist',figsize=(10,5))
+plt.legend()
+plt.show()
+## VIOLIN PLOT
+plt.figure(figsize=(5,5))
+sns.violinplot(data=data[selected_col])
+plt.title("violin plot of selected features")
+plt.show()
+The violin plot shows the distribution of four numerical features:'Glucose', 'BloodPressure', 'SkinThickness', 'Insulin'.The violin shape represents the probability density function (PDF) of each feature and the boxplot embedded within each violin plot shows the median,IQR and outliers.
+#### Kernel Density Estimation (KDE) plot for the selected features 
+plt.figure(figsize=(5,5))
+for column in selected_col:
+    sns.kdeplot(data[column],label=column)
+plt.title("Kernel Density Estimation (KDE) Plot of Numeric Features")
+plt.legend()
+plt.show()
+The image shows a kernel Density Estimation(KDE) PLOT of four numerical features:'Glucose', 'BloodPressure', 'SkinThickness', 'Insulin'.KDE is a NON-PARAMETRIC METHOD for esitmating the probability density function of a random variable the kde plot shows the estimated pdf of each feature which can be used to visualize the distribution of the data 
+
+##### Creating a count (frequency plot describing ) the data types and the count of variables.
+data.dtypes
+data.dtypes.value_counts()
+figsize=(16,2)
+data.dtypes.value_counts().plot(kind='barh')
+plt.show()
+It can be observed that there are 3 features of integer data type and six features of float data type 
+
+## Data Exploration:
+#### Check the balance of the data by plotting the count of outcomes by their value.Describe your findings and plan future course of action 
+data['Outcome'].value_counts()
+data['Outcome'].value_counts().plot(kind='bar')
+plt.legend()
+plt.title('Outcome')
+plt.show()
+outcome=(data['Outcome'].value_counts()/data['Outcome'].shape)*100
+print(outcome)
+data['Outcome'].value_counts(1)
+#### Inferences from Outcome Distribution
+**Class Imbalance:**
+1) the dataset exhibits class imbalance in the outcome variable
+2) class 0(no diabetes) has 500 instances
+3) class 1(diabetic) has 268 instances
+
+
+**Potential impact on modeling:**
+1) class imbalances may affect the performance of machine learning models, particularly for binary classification tasks
+2) addressing class imbalances through techniques like resampling or using appropriate evaluation metics may be necessary.
+
+
+**Consideration for predictive models:**
+
+1) models may need to be evaluated and tuned considering the imbalanced distribution to avooid biased predictions toward the majority class
+balanced_data=100-outcome
+balanced_data
+balanced_data.plot(kind='bar')
+plt.legend()
+plt.title('bALANCED_data')
+plt.show()
+### Findings and plan future course of action.
+1) we can see its a imbalance dataset.biased towards class 0 in datasset.this may affect the algo trained as that will also be biased toward same class so we have to balance it.
+2) we can use resampling or smote to balance a dataset.
+## Bi-Variate analysis
+#### creating scatter charts bw the pair of variables to understand relationships.
+plt.figure(figsize=(5,5))
+sns.scatterplot(x='Glucose',y='BloodPressure',hue='Outcome',data=data)
+plt.show()
+#### iNFERENCES
+IF THE GLUCOSE LEVEL INCREASES ABOVE 80 THEN THERE ARE HIGH CHANCES OF HAVING DIABETES
+#### iNFERENCES
+IF THE GLUCOSE LEVEL INCREASES ABOVE 80 THEN THERE ARE HIGH CHANCES OF HAVING DIABETES
+plt.figure(figsize=(12,5))
+sns.scatterplot(x='BMI',y='Insulin',hue='Outcome',data=data)
+plt.show()
+plt.figure(figsize=(12,5))
+sns.scatterplot(x='SkinThickness',y='Insulin',hue='Outcome',data=data)
+plt.show()
+plt.figure(figsize=(12,5))
+sns.scatterplot(x='Age',y='Glucose',hue='Outcome',data=data)
+plt.show()
+plt.figure(figsize=(12,5))
+sns.scatterplot(x='Age',y='Pregnancies',hue='Outcome',data=data)
+plt.show()
+1) WE CAN see pregnanices has highest relation with age feature
+2) Also outcome has maximum relation with the Glucose and minimum with blood pressure than the other features.
+3) we can see from scatterplot that there is outliers present in this data
+4) becasue of outliers our data is skewed to left or right side of which is not acceptable
+5) if we want to train a model this poses a problem
+6) therefore for better visulization and oulier detection we can use sns.boxplot and remove outliers from the dataset
+sns.pairplot(data)
+plt.suptitle("pairplot of numeric features",y=1.02);
+plt.show();
+#in diagonal histograms we will get 
+### Multi-Variate Analysis
+#### Perform correlation analysis.visually explore it using heat map.
+plt.figure(figsize=(5,5))
+sns.heatmap(data.corr(),annot=True)
+plt.show()
+we can see outcome has maximum relation with Glucose and minimum with blood pressure than the other features.
+## Data Modelling
+1)Devise strategies for model building.It is important to decide right validation framework.
+
+strategies for model building :-
+    
+    1. Descriptive Analysis :-
+        -Identify ID, Input and Target features
+        -Identify categorical and numerical features
+        -Identify columns with missing values
+        
+    2. Data Treatment (Missing values treatment) :-
+        - Detecting outliers & removing them. 
+        - Imputing mean, mode or median value at a place of missing value as per dataset   
+        
+    3.Feature Extraction / Feature Engineering :-
+        -we will remove noisy features from data
+        -By the help of correlation / heatmap / differnt types of feature selection techniques.
+        
+    4.Data is imbalanced
+        -For balancing the data we wil use SMOTE over sampling techinque.
+        
+    5.Building a model :-
+        - select a best algorithms for model
+        
+    6.Train a model
+    
+    7.Evaluation
+        - check a accuracy & mean squared error of model
+        
+    8.Hyper Parameter Tuning :-
+        -for decrese in RMSE check a best parameters for model.
+        
+    9.Create a clasification report. 
+
+### Feature Selection 
+#Data preparation for modeling
+x=data.drop(['Outcome'],axis=1)
+y=data['Outcome']#y is series now because having only one column
+x.head()
+#finding the correlation of every feature with the outcome(target variable)
+data.corrwith(data['Outcome'])
+bestfeatures = SelectKBest(score_func=chi2, k='all')
+fit = bestfeatures.fit(x,y)
+dfscores = pd.DataFrame(fit.scores_)
+dfcolumns = pd.DataFrame(x.columns)
+#concat two dataframes for better visualization 
+featureScores = pd.concat([dfcolumns,dfscores],axis=1)
+featureScores.columns = ['Specs','Score']  #naming the dataframe columns
+print(featureScores.nlargest(8,'Score'))  #print 10 best features
+plt.figure(figsize=(10,7))
+sns.heatmap(data.corr(),annot=True)
+plt.show()
+1) we can see BloodPressure feature has lowest relation with output column.
+2) so we will remove BloodPressure for training a good model with high accuracy.
+new_x=data.drop(['Outcome','BloodPressure'],axis=1).values 
+new_y=data.Outcome.values
+
+### SMOTE  to address the class imbalance
+
+#### Train a model
+# Train-Test Split for Data Modeling 
+trainx,testx,trainy,testy=train_test_split(new_x,new_y,test_size=0.20,random_state=10)
+
+print("Before OverSampling, counts of label '1': {}".format(sum(trainy == 1))) 
+print("Before OverSampling, counts of label '0': {} \n".format(sum(trainy == 0))) 
+from imblearn.over_sampling import SMOTE
+sm = SMOTE(random_state =63) 
+trainx_res,trainy_res = sm.fit_resample(trainx,trainy.ravel())
+print('After OverSampling, the shape of train_X: {}'.format(trainx_res.shape)) 
+print('After OverSampling, the shape of train_y: {} \n'.format(trainy_res.shape))
+print("After OverSampling, counts of label '1': {}".format(sum(trainy_res == 1)))
+print("After OverSampling, counts of label '0': {}".format(sum(trainy_res == 0)))
+### Applying an appropriate classification algo to build a model
+
+Model 1:Building a logistic regression model
+logreg=LogisticRegression(solver='liblinear',random_state=123)
+logreg.fit(trainx_res,trainy_res)
+prediction = logreg.predict(testx)
+print('Accuracy_score -',accuracy_score(testy,prediction))
+print('Mean_squared_error -',mean_squared_error(testy,prediction))
+logreg.fit(trainx_res,trainy_res)
+prediction = logreg.predict(testx)
+conf_matrix = confusion_matrix(testy, prediction)
+print(conf_matrix)
+print(classification_report(testy,prediction))
+
+#Preparing ROC Curve (Receiver Operating Characteristics Curve) 
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score 
+# predict probabilities
+probs = logreg.predict_proba(trainx_res) 
+# keep probabilities for the positive outcome only 
+probs = probs[:, 1] # calculate AUC 
+auc = roc_auc_score(trainy_res, probs) 
+print('AUC: %.3f' % auc) 
+# calculate roc curve
+fpr, tpr, thresholds = roc_curve(trainy_res, probs) 
+# plot no skill
+plt.plot([0, 1], [0, 1], linestyle='--')
+# plot the roc curve for the model 
+plt.plot(fpr, tpr, marker='.')
+plt.show()
+### Model:2=>Random Forest Classifier
+rf=RandomForestClassifier(random_state=42,max_depth=5)
+rf.fit(trainx_res,trainy_res)
+rf_predict=rf.predict(testx)
+print('Accuracy_score -',accuracy_score(testy,rf_predict)) 
+print('Mean_squared_error -',mean_squared_error(testy,rf_predict))
+### RandomForestClassifier(Hyper Parameter Tunning)
+param_grid={'n_estimators':[100,400,200,300],'criterion':['gini','entropy'],'max_depth':[1,2,3],'min_samples_split':[2,4,3],'min_samples_leaf':[1,2,3], 'max_leaf_nodes':[1,2,3],'max_samples':[2,4,3]}
+grid=GridSearchCV( estimator=rf,param_grid=param_grid,n_jobs=-1,cv=5,verbose=2)
+rf_grid=RandomForestClassifier(criterion= 'gini',max_depth= 2,max_leaf_nodes=3,max_samples=4,min_samples_leaf= 1,min_samples_split=3, n_estimators= 400,random_state=42)
+
+
+rf_grid.fit(trainx_res,trainy_res)
+
+
+rf_grid_predict=rf_grid.predict(testx)
+
+
+print('Accuracy_score -',accuracy_score(testy,rf_grid_predict)) 
+print('Mean_squared_error -',mean_squared_error(testy,rf_grid_predict))
+
+
+
+print((confusion_matrix(testy,prediction)))
+
+
+print(classification_report(testy,prediction))
+
+
+
+#Preparing ROC Curve (Receiver Operating Characteristics Curve) 
+from sklearn.metrics import roc_curve 
+from sklearn.metrics import roc_auc_score
+# predict probabilities 
+probs = rf.predict_proba(trainx_res) 
+# keep probabilities for the positive outcome only 
+probs = probs[:, 1] 
+# calculate AUC 
+auc = roc_auc_score(trainy_res, probs) 
+print('AUC: %.3f' % auc) 
+# calculate roc curve
+fpr, tpr, thresholds = roc_curve(trainy_res, probs) 
+# plot no skill 
+plt.plot([0, 1], [0, 1], linestyle='--') 
+# plot the roc curve for the model
+plt.plot(fpr, tpr, marker='.') 
+plt.show()
+### Model:3 Decision tree classifier
+dc=DecisionTreeClassifier(random_state=42)
+
+dc.fit(trainx_res,trainy_res)
+
+dc_pred=dc.predict(testx)
+
+print('Accuracy_score -',accuracy_score(testy,dc_pred)) 
+print('Mean_squared_error -',mean_squared_error(testy,dc_pred))
+#### Decision Tree Classifier (Hyper Parameter Tunning)
+dc_param_grid={'splitter':["best", "random"],'criterion':['gini','entropy'],'max_depth':[1,2,3], 'min_samples_split':[1,2,3],'min_samples_leaf':[1,2,3],'max_leaf_nodes':[1,2,3]}
+import warnings 
+warnings.filterwarnings('ignore') 
+dc_grid=GridSearchCV(estimator=dc,param_grid=dc_param_grid,n_jobs=-1,cv=5,verbose=2) 
+dc_grid.fit(trainx_res,trainy_res)
+dc_grid.best_params_
+dc_final=DecisionTreeClassifier(criterion= 'gini', max_depth=2,max_leaf_nodes=4,min_samples_leaf= 1, min_samples_split= 2,splitter='best',random_state=42)
+dc_final.fit(trainx_res,trainy_res)
+dc_final_pred=dc_final.predict(testx)
+
+print('Accuracy_score -',accuracy_score(testy,dc_final_pred)) 
+print('Mean_squared_error -',mean_squared_error(testy,dc_final_pred))
+
+print((confusion_matrix(testy,dc_final_pred)))
+
+print((classification_report(testy,dc_final_pred)))
+#preparing ROC curve (Receiver Operating Characteristics Curve)
+probs=dc_final.predict_proba(trainx_res)
+probs=probs[:,1]
+auc=roc_auc_score(trainy_res,probs)
+print('AUC: %.3f' %auc)
+fpr,tpr,thresholds=roc_curve(trainy_res,probs)
+plt.plot([0,1],[0,1],linestyle='--')
+plt.plot(fpr,tpr,marker='.')
+plt.show()
+### Model 4 :KNN
+knn=KNeighborsClassifier(n_neighbors=4)
+knn.fit(trainx_res,trainy_res)
+knn_pred=knn.predict(testx)
+print('Accuracy_score -',accuracy_score(testy,knn_pred)) 
+print('Mean_squared_error -',mean_squared_error(testy,knn_pred))
+print((confusion_matrix(testy,knn_pred)))
+print((classification_report(testy,knn_pred)))
+#Preparing ROC Curve (Receiver Operating Characteristics Curve) 
+from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_auc_score 
+# predict probabilities 
+probs = knn.predict_proba(trainx_res) 
+
+# keep probabilities for the positive outcome only
+probs = probs[:, 1] 
+# calculate AUC
+auc = roc_auc_score(trainy_res, probs) 
+print('AUC: %.3f' % auc) 
+# calculate roc curve
+fpr, tpr, thresholds = roc_curve(trainy_res, probs) 
+# plot no skill 
+plt.plot([0, 1], [0, 1], linestyle='--') 
+# plot the roc curve for the model
+plt.plot(fpr, tpr, marker='.') 
+plt.show()
+### Model Accuracy Comparison
+Algorithms=['KNN','RandomForest','Decisiontree','logreg']
+Accuracy_Score=[accuracy_score(testy,knn_pred),accuracy_score(testy,rf_grid_predict),accuracy_score(testy,dc_final_pred),accuracy_score(testy,prediction)]
+# Create a DataFrame
+accuracy_df = pd.DataFrame({'Algorithm': Algorithms, 'Accuracy': Accuracy_Score})
+# Display the accuracy table
+print(accuracy_df)
+Inferences from Model Accuracy Comparison
+1) RandomForest Performs Well:
+
+Among the algorithms tested, RandomForest exhibits the highest accuracy at 73.38%.
+
+2) KNN Shows Lower Accuracy:
+
+KNN has the lowest accuracy among the models, with a score of 62.34%.
+
+3) Consistent Performances:
+
+Decision Tree, SVM, Naive Bayes, and XGBoost show relatively similar accuracies, ranging from 68.83% to 72.08%.
+
+4) Consideration for Model Selection:
+
+The choice of the algorithm depends on various factors, including the specific requirements of the task, interpretability, and computational efficiency.
+
+5) Further Evaluation:
+
+Additional evaluation metrics, such as precision, recall, and F1 score, should be considered for a comprehensive assessment of model performance.
+
+#creating the objects 
+logreg_cv = LogisticRegression(solver='liblinear',random_state=123) 
+dt_cv=DecisionTreeClassifier(random_state=123) 
+knn_cv=KNeighborsClassifier() 
+rf_cv=RandomForestClassifier(random_state=123) 
+cv_dict = {0: 'Logistic Regression', 1: 'Decision Tree',2:'KNN',3:'Random Forest'} 
+cv_models=[logreg_cv,dt_cv,knn_cv,rf_cv] 
+for i,model in enumerate(cv_models): 
+    print("{} Test Accuracy: {}".format(cv_dict[i],cross_val_score(model, trainx, trainy, cv=10, scoring ='accuracy').mean()))
+**Inferences from Model Comparison with KNN Algorithm Results**
+1) **Logistic Regression Outperforms:**
+Among the models tested, Logistic Regression exhibits the highest test accuracy at 77.68%.
+
+2) **Decisive Model Differences:**
+
+Decision Tree, and Random Forest show lower test accuracies compared to Logistic Regression, ranging from 70.53% to 76.21%.
+
+3) **Consideration for Model Selection:**
+
+Logistic Regression might be preferred choices based on higher test accuracies, but other factors such as interpretability and computational efficiency should be considered.
+
+4) **Cross-Validation Insights:**
+
+The use of cross-validation provides a robust estimate of model performance, reducing the impact of data partitioning on results.
+
+5) **Further Exploration:**
+
+Evaluation metrics beyond accuracy, such as precision, recall, and F1 score, should be considered for a comprehensive understanding of model effectiveness.
